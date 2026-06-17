@@ -65,13 +65,13 @@ RUN THE PROGRAMS
    extract.m
 	>> extract
 4. Run arcLP.m as follows, assuming degeneracy is not a problem
-	>> [x,obj,kk,infe]=arclp(A,b,c);
+	>> [x,obj,kk,infe,lambda,s,exflag]=arclp(A,b,c,d,tol,iter);
 5. Run mehrotra.m as follows, assuming degeneracy is not a problem
-	>> [x,obj,kk,infe]=mehrotra(A,b,c);
+	>> [x,obj,kk,infe,lambda,s,exflag]=mehrotra(A,b,c,d,tol,iter);
 
 If degeneracy is a problem, Steps 4 and 5 are replaced by the following 
 4'. Run arcLP.m as follows 
-	>> [x,obj,kk,infe,m1,n1]=arclp(A,b,c,1);
+	>> [x,obj,kk,infe,lambda,s,exflag]=arclp(A,b,c,1,[],[]);
 5'. Run mehrotra.m as follows 
 	>> [x,obj,kk,infe]=mehrotra(A,b,c,1);
 
