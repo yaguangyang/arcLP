@@ -11,7 +11,7 @@
 % algorithm for standard Linear Programming problems proposed in 
 % [Y. Yang] Two computationally efficient polynomial-iteration 
 % infeasible interior-point algorithms for linear programming
-% Numerical Algorithms, (2018) 79:957–992. According to the numerical 
+% Numerical Algorithms, (2018) 79:957â€“992. According to the numerical 
 % test reported in [Y. Yang], this algorithm is competitive to 
 % the popular Mehrotra's algorithm. Unlike Mehrotra's algorithm,
 % arcLP searches the optimizer along an arc. The implemented algorithm
@@ -19,21 +19,32 @@
 % (see [Y. Yang]). Bug report should be sent to the author. 
 %
 % Synopsis:
-%            function [x,obj,kk,infe]=arcLP(A,b,c,d) 
+%            function [x,obj,kk,infe,lambda,s,exflag]=arcLP(A,b,c,d,tol,iter) 
 % Input arguments:
 %   A: input matrix (real) with dimension nxn.
 %   b: input vector (real) with dimension nx1.
 %   c: input vector (real) with dimension nx1.
 %   d: d=1 use a function to reduce A to full rank. d=1 is suggested
 %          for degenerate problems to make matrix A full rank 
-%      d=0 or without d will not reduce A to full rank
+%      d=0 or [] or without d will not reduce A to full rank
+%   tol: input of termination criterion, default is 10^(-8), user can
+%      select any value smaller than 1
+%   iter: input of the maximal number of iteraion, user can select any
+%   integer greater than 1; default is 10000
 %   
 %
 % Output arguments:
-%   x:    the optimal solution of the linear programming problem.
-%   obj:  the optimum of the linear programming problem.
+%   x:    optimal solution of the linear programming problem.
+%   obj:  optimal objective value of the linear programming problem.
 %   kk:   total iteration numbers used to find the optimal solution.
-%   infe: the norm of the error || Ax-b ||.
+%   infe: norm of the error || Ax-b ||.
+%   exflag: =0 find the optimal solution
+%           =1 the problem is infeasible
+%           =2 the problem is unbounded
+%           =3 both primal and dual are infeasible
+%           =4 lack either A or b or c in input
+%   lambda: optimal dual variable
+%   s:    optimal slack variable
 %
 %                   Conditions for External Use
 %                   ===========================
@@ -45,11 +56,24 @@
 %   2. This code may only be used for research and development, unless 
 %      it has been agreed  otherwise with the author in writing.
 
-function [x,obj,kk,infe]=arcLP(A,b,c,d) 
+function [x,obj,kk,infe,lambda,s,exflag]=arcLP(A,b,c,d,tol,iter) 
 
-if exist('d','var') == 0
-    d = 0;
+if nargin < 3
+    exflag=4;  x=[]; obj=[]; kk=[]; infe=[]; lambda=[]; s=[];
+    disp('A, b, c must be provided'); return; %error('A, b, c must be provided');
 end
+if nargin < 4  || isempty(d)
+    d=0;
+end
+if nargin < 5 || isempty(tol)
+    tol=0.00000001;
+end
+if nargin < 6 || isempty(iter)
+    iter=10000;
+end
+% if exist('d','var') == 0
+%     d = 0;
+% end
 epsilon=0.00000001; 
 rho=0.1;
 sigma_min=0.000001; sigma_max=0.3;
@@ -86,8 +110,9 @@ while prepro==1
             if abs(b(i))<=epsilon    % if no error b(i)=0
                 A(i,:)=[]; b(i)=[]; m=m-1; %lambda(i)=[];
                 prepro=1;
-            else
-                error('infeasible')
+            elseif b(i)<0
+                exflag=1; x=[]; obj=[]; kk=[]; infe=[]; lambda=[]; s=[];
+                disp('infeasible primal'); return; %error('infeasible')
             end
         end
     end
@@ -103,7 +128,9 @@ while prepro==1
                 n=n-1;
                 prepro=1;
             else
-                error('infinite xi')
+                if c(i)>0 obj=inf; elseif c(i)<0 obj=-inf; end
+                exflag=2; x=[]; kk=[]; infe=[];  lambda=[]; s=[];
+                disp('unbounded primal'); return; %error('infinite xi')
             end
         end
     end
@@ -118,7 +145,8 @@ while prepro==1
             idj=find(A(i,:));
             xj=b(i)/A(i,idj); x_final(x_indx(idj))=xj;
             if xj<0
-                error('the problem is not feasible')
+                exflag=1; x=[]; obj=[]; kk=[]; infe=[];  lambda=[]; s=[];
+                disp('infeasible primal'); return; %error('the problem is not feasible')
             end
             csum=csum+c(idj)*xj;
             for k=1:length(b)
@@ -157,13 +185,15 @@ while prepro==1
             end
         elseif b(i)<0
             if min(A(i,:))==0
-%                 [m n]=size(A)
-                error('infeasible problem')
+                exflag=1; x=[]; obj=[]; kk=[]; infe=[];  lambda=[]; s=[];
+                disp('infeasible primal'); return; 
+                % error('infeasible problem')
             end
         elseif b(i)>0
             if max(A(i,:))==0
-%                 [m n]=size(A)
-                error('infeasible problem')
+                exflag=1; x=[]; obj=[]; kk=[]; infe=[];  lambda=[]; s=[];
+                disp('infeasible primal'); return;
+                % error('infeasible problem')
             end
         end
     end
@@ -301,7 +331,7 @@ kk=0; %iteration count
 singleEarly=0; nu_k=1; 
 sOld=s; xOld=x; lOld=lambda;
 while (norm(rB)/max(1, norm(b)))+(norm(rC)/max(1, norm(c))) ...
-        +(abs(c'*x-b'*lambda)/max(norm(b),max(1,norm(c))))>epsilon
+        +(abs(c'*x-b'*lambda)/max(norm(b),max(1,norm(c))))>tol && kk<iter
     if d==1
         if fullRank==0 || singleEarly==1
             disp('make A full rank')
@@ -551,15 +581,19 @@ while (norm(rB)/max(1, norm(b)))+(norm(rC)/max(1, norm(c))) ...
     x=x-dx*sin(alpha)+ddx*(1-cos(alpha));
     rB=A*x-b;
     rC=A'*lambda+s-c;
-    mu=s'*x/n
-    nu_k=nu_k*(1-sin(alpha));       
+    mu=s'*x/n;
+    nu_k=nu_k*(1-sin(alpha));  
+    if max(x)>10^10
+        exflag=2;
+        disp('the problem is unbound'); return;
+    elseif max(lambda)>10^10
+        exflag=1;
+        disp('the problem is infeasible'); return;
+    end
     %%%%%%%%%%%%%%%%%%%%%%
     % Step 4 
     %%%%%%%%%%%%%%%%%%%%%% 
-    kk=kk+1
-%     if kk==2
-%         warning('check')
-%     end
+    kk=kk+1;
     if alpha <10^(-8) || mu<10^(-8)
         break;
     end
@@ -576,8 +610,19 @@ while (norm(rB)/max(1, norm(b)))+(norm(rC)/max(1, norm(c))) ...
     end
     sOld=s; xOld=x; lOld=lambda;
 end
-obj=c'*x+csum;
 infe=norm(A*x-b);
+if kk==iter
+    exflag=3; obj=[];
+    disp('the maximal iteration number is reached'); return;
+    % error('the maximal iteration number is reached');
+elseif infe>0.1
+    exflag=1; obj=[];
+    disp('the problems is infeasible'); return;
+else
+    obj=c'*x+csum;
+    % infe=norm(A*x-b);
+    exflag=0;
+end
 
 % recover back to original x vector
 if d==0
